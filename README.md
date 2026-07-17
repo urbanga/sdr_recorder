@@ -24,6 +24,22 @@ executable, but the system must provide the shared RTL-SDR, libusb, and LAME
 libraries. A fully static portable build can be added for a specific target
 Linux distribution.
 
+### Windows with MSYS2 UCRT64
+
+Install the UCRT64 GCC, CMake, Ninja, GoogleTest, RTL-SDR, and LAME packages,
+then build from the `MSYS2 UCRT64` terminal:
+
+```bash
+cmake -S . -B build-windows -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-windows
+(cd build-windows && ctest --output-on-failure)
+```
+
+The MinGW build automatically copies all required compiler, RTL-SDR, libusb,
+and LAME DLLs next to `build-windows/sdr-recorder.exe`. Copy the EXE together
+with those DLLs when moving the application to another computer. MSYS2 is not
+required on the target computer, but the RTL-SDR must use the WinUSB driver.
+
 ## Usage
 
 ```bash

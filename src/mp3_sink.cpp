@@ -103,10 +103,23 @@ private:
     std::FILE* file_{nullptr};
 };
 
+std::tm local_time(std::time_t time) {
+    std::tm result{};
+#ifdef _WIN32
+    if (localtime_s(&result, &time) != 0) {
+        throw std::runtime_error("Could not convert recording timestamp");
+    }
+#else
+    if (localtime_r(&time, &result) == nullptr) {
+        throw std::runtime_error("Could not convert recording timestamp");
+    }
+#endif
+    return result;
+}
+
 std::string timestamp(std::chrono::system_clock::time_point now) {
     const std::time_t time = std::chrono::system_clock::to_time_t(now);
-    std::tm local{};
-    localtime_r(&time, &local);
+    const std::tm local = local_time(time);
     std::ostringstream value;
     value << std::put_time(&local, "%Y%m%d_%H%M%S");
     const auto milliseconds =

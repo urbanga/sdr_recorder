@@ -36,6 +36,19 @@ target_include_directories(sdr-recorder PRIVATE include "${RTLSDR_INCLUDE_DIR}")
 target_link_libraries(sdr-recorder PRIVATE sdr_core "${RTLSDR_LIBRARY}" "${MP3LAME_LIBRARY}")
 target_compile_options(sdr-recorder PRIVATE -Wall -Wextra -Wpedantic)
 
+if(MINGW)
+    get_filename_component(MINGW_RUNTIME_DIRECTORY "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    add_custom_command(TARGET sdr-recorder POST_BUILD
+        COMMAND "${CMAKE_COMMAND}"
+                "-DEXECUTABLE=$<TARGET_FILE:sdr-recorder>"
+                "-DSEARCH_DIRECTORY=${MINGW_RUNTIME_DIRECTORY}"
+                "-DDESTINATION=$<TARGET_FILE_DIR:sdr-recorder>"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/copy_runtime_dependencies.cmake"
+        COMMENT "Discovering and copying Windows runtime dependencies"
+        VERBATIM
+    )
+endif()
+
 install(TARGETS sdr-recorder RUNTIME DESTINATION bin)
 
 if(SDR_RECORDER_BUILD_TESTS)
