@@ -40,6 +40,7 @@ TEST(SessionRecorder, IgnoresSilenceBeforeFirstSignal) {
     const std::vector<std::int16_t> audio(5, 1);
     recorder.process(audio, false);
     EXPECT_TRUE(factory.states.empty());
+    EXPECT_FALSE(recorder.recording());
 }
 
 TEST(SessionRecorder, DiscardsTrailingSilenceAndClosesAtConfiguredDuration) {
@@ -71,6 +72,7 @@ TEST(SessionRecorder, ContinuedSignalPreservesInternalPauseAndResetsTimer) {
     EXPECT_TRUE(recorder.recording());
     recorder.process(silence, false);
     EXPECT_FALSE(recorder.recording());
+    ASSERT_EQ(factory.states.size(), 1U);
     ASSERT_EQ(factory.states[0]->samples.size(), 15U);
     EXPECT_EQ(factory.states[0]->samples[4], 2);
     EXPECT_EQ(factory.states[0]->samples[5], 0);
@@ -83,9 +85,29 @@ TEST(SessionRecorder, NewSignalAfterCloseCreatesNewFile) {
     sdr::SessionRecorder recorder(10, 0.5, factory);
     const std::vector<std::int16_t> block(5, 1);
     recorder.process(block, true);
+    ASSERT_EQ(factory.states.size(), 1U);
+    EXPECT_TRUE(recorder.recording());
     recorder.process(block, false);
+    EXPECT_FALSE(recorder.recording());
+    EXPECT_EQ(factory.states[0]->closes, 1);
     recorder.process(block, true);
     EXPECT_EQ(factory.states.size(), 2U);
+    EXPECT_TRUE(recorder.recording());
+}
+
+TEST(SessionRecorder, FinishDiscardsPendingTrailingSilence) {
+    FakeFactory factory;
+    sdr::SessionRecorder recorder(10, 1.0, factory);
+    const std::vector<std::int16_t> signal(5, 2);
+    const std::vector<std::int16_t> silence(5, 0);
+    recorder.process(signal, true);
+    recorder.process(silence, false);
+    recorder.finish();
+
+    ASSERT_EQ(factory.states.size(), 1U);
+    EXPECT_EQ(factory.states[0]->samples, signal);
+    EXPECT_EQ(factory.states[0]->closes, 1);
+    EXPECT_FALSE(recorder.recording());
 }
 
 }  // namespace

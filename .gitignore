@@ -1,4 +1,5 @@
+/Testing/
 /build/
-/build-release/
+/build-*/
 /recordings/
 *.mp3

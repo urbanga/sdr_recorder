@@ -1,8 +1,8 @@
 #include "sdr/config.hpp"
 
-#include <charconv>
 #include <cmath>
 #include <limits>
+#include <locale>
 #include <sstream>
 #include <string_view>
 
@@ -11,14 +11,11 @@ namespace {
 
 double parse_number(std::string_view text, std::string_view option) {
     std::string value{text};
-    std::size_t consumed = 0;
     double result = 0.0;
-    try {
-        result = std::stod(value, &consumed);
-    } catch (const std::exception&) {
-        throw std::invalid_argument("Invalid value for " + std::string(option) + ": " + value);
-    }
-    if (consumed != value.size() || !std::isfinite(result)) {
+    std::istringstream input{value};
+    input.imbue(std::locale::classic());
+    input >> std::noskipws >> result;
+    if (!input || !input.eof() || !std::isfinite(result)) {
         throw std::invalid_argument("Invalid value for " + std::string(option) + ": " + value);
     }
     return result;

@@ -17,7 +17,8 @@ TEST(Demodulator, ProducesOneAudioSamplePerDecimationGroup) {
 }
 
 TEST(Demodulator, StrongVaryingIqHasHigherLevelThanSmallVaryingIq) {
-    sdr::Demodulator demodulator(sdr::Modulation::nfm, 240'000, 48'000);
+    sdr::Demodulator weak_demodulator(sdr::Modulation::nfm, 240'000, 48'000);
+    sdr::Demodulator strong_demodulator(sdr::Modulation::nfm, 240'000, 48'000);
     std::vector<std::uint8_t> weak;
     std::vector<std::uint8_t> strong;
     for (int n = 0; n < 100; ++n) {
@@ -31,8 +32,12 @@ TEST(Demodulator, StrongVaryingIqHasHigherLevelThanSmallVaryingIq) {
         strong.push_back(static_cast<std::uint8_t>(127 + strong_amplitude * i_sign));
         strong.push_back(static_cast<std::uint8_t>(127 + strong_amplitude * q_sign));
     }
-    EXPECT_GT(demodulator.process(strong).signal_dbfs,
-              demodulator.process(weak).signal_dbfs + 20.0);
+    // Demodulator is stateful (FIR history, mixer and decimation phase). Keep
+    // the two measurements isolated and evaluate them before the assertion so
+    // the test cannot depend on macro argument evaluation order.
+    const double weak_level = weak_demodulator.process(weak).signal_dbfs;
+    const double strong_level = strong_demodulator.process(strong).signal_dbfs;
+    EXPECT_GT(strong_level, weak_level + 20.0);
 }
 
 TEST(Demodulator, RejectsIncompleteIqPair) {
@@ -86,8 +91,10 @@ TEST(Demodulator, KeepsSpeechToneAndRejectsHighFrequencyAudio) {
         speech_demodulator.process(modulated_nfm(1'000.0)).audio;
     const auto high =
         high_demodulator.process(modulated_nfm(10'000.0)).audio;
-    EXPECT_GT(tail_rms(speech), 1'000.0);
-    EXPECT_LT(tail_rms(high), tail_rms(speech) * 0.1);
+    const double speech_rms = tail_rms(speech);
+    const double high_rms = tail_rms(high);
+    EXPECT_GT(speech_rms, 1'000.0);
+    EXPECT_LT(high_rms, speech_rms * 0.1);
 }
 
 TEST(Demodulator, OptionalNotchRejectsPersistentInterferenceTone) {
@@ -97,7 +104,9 @@ TEST(Demodulator, OptionalNotchRejectsPersistentInterferenceTone) {
     const auto tone = modulated_nfm(1'890.0);
     const auto original = unfiltered.process(tone).audio;
     const auto notched = filtered.process(tone).audio;
-    EXPECT_LT(tail_rms(notched), tail_rms(original) * 0.1);
+    const double original_rms = tail_rms(original);
+    const double notched_rms = tail_rms(notched);
+    EXPECT_LT(notched_rms, original_rms * 0.1);
 }
 
 }  // namespace

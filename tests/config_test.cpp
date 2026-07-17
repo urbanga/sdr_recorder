@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <locale>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,28 @@ sdr::Config parse(std::vector<std::string> values) {
     for (auto& value : values) argv.push_back(value.data());
     return sdr::parse_arguments(static_cast<int>(argv.size()), argv.data());
 }
+
+class CommaDecimalPoint final : public std::numpunct<char> {
+protected:
+    char do_decimal_point() const override { return ','; }
+};
+
+class ScopedGlobalLocale {
+public:
+    ScopedGlobalLocale()
+        : previous_(std::locale()),
+          comma_locale_(std::locale::classic(), new CommaDecimalPoint) {
+        std::locale::global(comma_locale_);
+    }
+    ~ScopedGlobalLocale() { std::locale::global(previous_); }
+
+    ScopedGlobalLocale(const ScopedGlobalLocale&) = delete;
+    ScopedGlobalLocale& operator=(const ScopedGlobalLocale&) = delete;
+
+private:
+    std::locale previous_;
+    std::locale comma_locale_;
+};
 
 TEST(Config, ParsesFrequencySuffixAndSessionOptions) {
     const auto config = parse({"app", "-f", "446.00625M", "--silence", "10",
@@ -35,6 +58,13 @@ TEST(Config, ParsesOptionalAudioNotch) {
                                "--notch-width", "120"});
     EXPECT_DOUBLE_EQ(config.notch_frequency_hz, 1890.0);
     EXPECT_DOUBLE_EQ(config.notch_width_hz, 120.0);
+}
+
+TEST(Config, ParsingIsIndependentOfProcessLocale) {
+    const ScopedGlobalLocale comma_locale;
+    const auto config = parse({"app", "-f", "446.00625M", "--silence", "10.5"});
+    EXPECT_EQ(config.frequency_hz, 446'006'250U);
+    EXPECT_DOUBLE_EQ(config.silence_seconds, 10.5);
 }
 
 }  // namespace
