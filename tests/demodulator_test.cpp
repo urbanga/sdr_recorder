@@ -56,13 +56,14 @@ TEST(Demodulator, RejectsTunerDcSpurBeforeDecimation) {
     EXPECT_LT(settled.signal_dbfs, -60.0);
 }
 
-std::vector<std::uint8_t> modulated_nfm(double audio_frequency_hz) {
+std::vector<std::uint8_t> modulated_fm(double audio_frequency_hz,
+                                       double iq_rate,
+                                       int sample_count,
+                                       double deviation_hz) {
     constexpr double pi = 3.14159265358979323846;
-    constexpr double iq_rate = 240'000.0;
-    constexpr double deviation_hz = 2'500.0;
     std::vector<std::uint8_t> iq;
-    iq.reserve(48'000);
-    for (int n = 0; n < 24'000; ++n) {
+    iq.reserve(static_cast<std::size_t>(sample_count) * 2);
+    for (int n = 0; n < sample_count; ++n) {
         const double phase =
             -pi * n / 2.0 +
             (deviation_hz / audio_frequency_hz) *
@@ -73,6 +74,10 @@ std::vector<std::uint8_t> modulated_nfm(double audio_frequency_hz) {
             std::lround(127.5 + 100.0 * std::sin(phase))));
     }
     return iq;
+}
+
+std::vector<std::uint8_t> modulated_nfm(double audio_frequency_hz) {
+    return modulated_fm(audio_frequency_hz, 240'000.0, 24'000, 2'500.0);
 }
 
 double tail_rms(const std::vector<std::int16_t>& samples) {
@@ -107,6 +112,15 @@ TEST(Demodulator, OptionalNotchRejectsPersistentInterferenceTone) {
     const double original_rms = tail_rms(original);
     const double notched_rms = tail_rms(notched);
     EXPECT_LT(notched_rms, original_rms * 0.1);
+}
+
+TEST(Demodulator, WideFmPreservesBroadcastBandAudioAtFortyEightKhz) {
+    sdr::Demodulator demodulator(sdr::Modulation::wfm, 1'200'000, 48'000);
+    const auto iq = modulated_fm(10'000.0, 1'200'000.0, 120'000, 50'000.0);
+    const auto result = demodulator.process(iq);
+
+    EXPECT_EQ(result.audio.size(), 4'800U);
+    EXPECT_GT(tail_rms(result.audio), 1'000.0);
 }
 
 }  // namespace

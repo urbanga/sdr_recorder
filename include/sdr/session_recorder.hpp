@@ -12,7 +12,8 @@ namespace sdr {
 class SessionRecorder {
 public:
     SessionRecorder(std::uint32_t sample_rate, double silence_seconds,
-                    AudioSinkFactory& sink_factory);
+                    AudioSinkFactory& sink_factory,
+                    double max_session_seconds = 0.0);
     ~SessionRecorder();
 
     SessionRecorder(const SessionRecorder&) = delete;
@@ -24,9 +25,14 @@ public:
 
 private:
     std::size_t silence_limit_samples_;
+    std::size_t max_session_samples_{0};
     std::size_t silent_samples_{0};
+    std::size_t session_samples_{0};
     AudioSinkFactory& sink_factory_;
     std::unique_ptr<AudioSink> sink_;
+
+    void close_session();
+    void write_active(std::span<const std::int16_t> samples);
 };
 
 }  // namespace sdr

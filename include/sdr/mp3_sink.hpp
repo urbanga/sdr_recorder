@@ -20,7 +20,6 @@ private:
     std::uint32_t frequency_hz_;
     std::uint32_t sample_rate_;
     int bitrate_kbps_;
-    std::uint64_t sequence_{0};
 };
 
 }  // namespace sdr

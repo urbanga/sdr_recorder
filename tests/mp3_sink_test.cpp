@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -107,6 +108,7 @@ TEST(Mp3Sink, EncodesAndFlushesConsecutiveMp3Frames) {
     }
     ASSERT_EQ(files.size(), 1U);
     EXPECT_EQ(files[0].extension(), ".mp3");
+    EXPECT_EQ(files[0].filename().string().find("_000.mp3"), std::string::npos);
     EXPECT_GT(std::filesystem::file_size(files[0]), 1'000U);
 
     std::ifstream encoded_file(files[0], std::ios::binary);
@@ -115,6 +117,28 @@ TEST(Mp3Sink, EncodesAndFlushesConsecutiveMp3Frames) {
         std::istreambuf_iterator<char>{encoded_file},
         std::istreambuf_iterator<char>{}};
     EXPECT_TRUE(starts_with_consecutive_mp3_frames(encoded));
+}
+
+TEST(Mp3Sink, UsesUniqueMillisecondTimestampsForConsecutiveFiles) {
+    const TemporaryDirectory directory;
+    sdr::Mp3SinkFactory factory(directory.path(), 96'600'000, 48'000, 128);
+
+    auto first = factory.create();
+    first->close();
+    auto second = factory.create();
+    second->close();
+
+    std::vector<std::string> names;
+    for (const auto& entry : std::filesystem::directory_iterator(directory.path())) {
+        names.push_back(entry.path().filename().string());
+    }
+    std::sort(names.begin(), names.end());
+    ASSERT_EQ(names.size(), 2U);
+    EXPECT_NE(names[0], names[1]);
+    EXPECT_EQ(names[0].find("Hz_000.mp3"), std::string::npos);
+    EXPECT_EQ(names[1].find("Hz_001.mp3"), std::string::npos);
+    EXPECT_TRUE(names[0].ends_with("_96600000Hz.mp3"));
+    EXPECT_TRUE(names[1].ends_with("_96600000Hz.mp3"));
 }
 
 }  // namespace

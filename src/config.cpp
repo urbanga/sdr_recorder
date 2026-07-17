@@ -62,12 +62,16 @@ Config parse_arguments(int argc, char** argv) {
         } else if (option == "--modulation") {
             const auto value = next_value(i, argc, argv);
             if (value == "nfm") config.modulation = Modulation::nfm;
+            else if (value == "wfm") config.modulation = Modulation::wfm;
             else if (value == "am") config.modulation = Modulation::am;
-            else throw std::invalid_argument("--modulation must be nfm or am");
+            else throw std::invalid_argument("--modulation must be nfm, wfm or am");
         } else if (option == "--squelch-dbfs") {
             config.squelch_dbfs = parse_number(next_value(i, argc, argv), option);
         } else if (option == "--silence") {
             config.silence_seconds = parse_number(next_value(i, argc, argv), option);
+        } else if (option == "--max-session") {
+            config.max_session_seconds =
+                parse_number(next_value(i, argc, argv), option);
         } else if (option == "--output") {
             config.output_directory = next_value(i, argc, argv);
         } else if (option == "--device") {
@@ -93,6 +97,9 @@ Config parse_arguments(int argc, char** argv) {
     }
     if (!has_frequency) throw std::invalid_argument("--frequency is required");
     if (config.silence_seconds <= 0.0) throw std::invalid_argument("--silence must be positive");
+    if (config.max_session_seconds < 0.0) {
+        throw std::invalid_argument("--max-session must not be negative");
+    }
     if (config.squelch_dbfs > 0.0) throw std::invalid_argument("--squelch-dbfs must not exceed 0");
     if (config.device_index < 0) throw std::invalid_argument("--device must not be negative");
     if (config.mp3_bitrate_kbps < 8 || config.mp3_bitrate_kbps > 320) {
@@ -105,6 +112,9 @@ Config parse_arguments(int argc, char** argv) {
     if (config.notch_width_hz <= 0.0) {
         throw std::invalid_argument("--notch-width must be positive");
     }
+    if (config.modulation == Modulation::wfm) {
+        config.iq_sample_rate = 1'200'000;
+    }
     return config;
 }
 
@@ -113,9 +123,10 @@ std::string usage(const char* program) {
     out << "Usage: " << program << " --frequency HZ [options]\n\n"
         << "Options:\n"
         << "  -f, --frequency HZ|k|M  Frequency, e.g. 446.00625M (required)\n"
-        << "      --modulation nfm|am Demodulation mode (default: nfm)\n"
+        << "      --modulation MODE   nfm, wfm or am (default: nfm)\n"
         << "      --squelch-dbfs DB    Signal threshold (default: -35)\n"
         << "      --silence SECONDS    Silence required to close a session (default: 10)\n"
+        << "      --max-session SEC    Split an active session at this duration\n"
         << "      --output DIRECTORY   MP3 destination (default: recordings)\n"
         << "      --device INDEX       RTL-SDR device index (default: 0)\n"
         << "      --gain DB            Manual tuner gain; omit for automatic gain\n"

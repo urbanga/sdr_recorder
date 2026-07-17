@@ -23,7 +23,8 @@ public:
 
 private:
     Modulation modulation_;
-    std::uint32_t decimation_;
+    std::uint32_t channel_decimation_;
+    std::uint32_t audio_decimation_;
     float previous_i_{1.0F};
     float previous_q_{0.0F};
     float am_dc_{0.0F};
@@ -35,6 +36,7 @@ private:
     std::vector<float> audio_filter_;
     std::vector<float> audio_history_;
     std::size_t audio_history_position_{0};
+    std::uint32_t audio_decimation_phase_{0};
     bool notch_enabled_{false};
     float notch_b0_{1.0F};
     float notch_b1_{0.0F};

@@ -7,13 +7,14 @@
 
 namespace sdr {
 
-enum class Modulation { nfm, am };
+enum class Modulation { nfm, wfm, am };
 
 struct Config {
     std::uint32_t frequency_hz{};
     Modulation modulation{Modulation::nfm};
     double squelch_dbfs{-35.0};
     double silence_seconds{10.0};
+    double max_session_seconds{0.0};
     std::filesystem::path output_directory{"recordings"};
     int device_index{0};
     int ppm{0};

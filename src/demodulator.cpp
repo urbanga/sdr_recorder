@@ -49,15 +49,34 @@ Demodulator::Demodulator(Modulation modulation, std::uint32_t iq_sample_rate,
     if (audio_sample_rate == 0 || iq_sample_rate % audio_sample_rate != 0) {
         throw std::invalid_argument("IQ sample rate must be an integer multiple of audio rate");
     }
-    decimation_ = iq_sample_rate / audio_sample_rate;
+    const std::uint32_t channel_sample_rate =
+        modulation == Modulation::wfm ? 240'000U : audio_sample_rate;
+    if (iq_sample_rate % channel_sample_rate != 0 ||
+        channel_sample_rate % audio_sample_rate != 0) {
+        throw std::invalid_argument(
+            "Sample rates do not support the required demodulation stages");
+    }
+    channel_decimation_ = iq_sample_rate / channel_sample_rate;
+    audio_decimation_ = channel_sample_rate / audio_sample_rate;
+
     constexpr double pi = 3.14159265358979323846;
-    const double audio_period = 1.0 / audio_sample_rate;
-    const double lowpass_rc = 1.0 / (2.0 * pi * 3'500.0);
-    audio_lowpass_alpha_ =
-        static_cast<float>(audio_period / (lowpass_rc + audio_period));
-    audio_highpass_decay_ =
-        static_cast<float>(std::exp(-2.0 * pi * 150.0 / audio_sample_rate));
-    audio_filter_ = lowpass_filter(101, 3'400.0, audio_sample_rate);
+    const double demodulated_period = 1.0 / channel_sample_rate;
+    const double deemphasis_time = modulation == Modulation::am ? 0.0 : 50e-6;
+    audio_lowpass_alpha_ = deemphasis_time == 0.0
+                               ? 1.0F
+                               : static_cast<float>(demodulated_period /
+                                                    (deemphasis_time +
+                                                     demodulated_period));
+    const double highpass_hz =
+        modulation == Modulation::wfm ? 30.0 : 150.0;
+    audio_highpass_decay_ = static_cast<float>(
+        std::exp(-2.0 * pi * highpass_hz / audio_sample_rate));
+    const double audio_cutoff_hz =
+        modulation == Modulation::wfm ? 15'000.0 : 3'400.0;
+    const std::size_t audio_filter_taps =
+        modulation == Modulation::wfm ? 129U : 101U;
+    audio_filter_ =
+        lowpass_filter(audio_filter_taps, audio_cutoff_hz, channel_sample_rate);
     audio_history_.resize(audio_filter_.size());
 
     if (notch_frequency_hz > 0.0) {
@@ -81,7 +100,10 @@ Demodulator::Demodulator(Modulation modulation, std::uint32_t iq_sample_rate,
     // A real channel filter is essential here: after Fs/4 offset tuning the
     // RTL-SDR DC spur sits at Fs/4. A short boxcar would alias part of it into
     // the audio band during decimation (12 kHz with the default rates).
-    const double cutoff_hz = modulation == Modulation::nfm ? 12'000.0 : 10'000.0;
+    const double cutoff_hz = modulation == Modulation::wfm
+                                 ? 100'000.0
+                                 : (modulation == Modulation::nfm ? 12'000.0
+                                                                  : 10'000.0);
     channel_filter_ = lowpass_filter(129, cutoff_hz, iq_sample_rate);
     channel_history_.resize(channel_filter_.size());
 }
@@ -91,7 +113,7 @@ DemodulatedBlock Demodulator::process(std::span<const std::uint8_t> iq) {
 
     const std::size_t complex_count = iq.size() / 2;
     std::vector<std::complex<float>> channel;
-    channel.reserve(complex_count / decimation_ + 1);
+    channel.reserve(complex_count / channel_decimation_ + 1);
 
     // The tuner is deliberately placed Fs/4 above the requested channel to
     // avoid its DC spike. Mix that channel back to DC before low-pass decimation.
@@ -111,7 +133,7 @@ DemodulatedBlock Demodulator::process(std::span<const std::uint8_t> iq) {
         channel_history_position_ =
             (channel_history_position_ + 1) % channel_history_.size();
 
-        if (++decimation_phase_ != decimation_) continue;
+        if (++decimation_phase_ != channel_decimation_) continue;
         decimation_phase_ = 0;
 
         std::complex<float> filtered{};
@@ -132,7 +154,7 @@ DemodulatedBlock Demodulator::process(std::span<const std::uint8_t> iq) {
 
     DemodulatedBlock result;
     result.signal_dbfs = signal_dbfs;
-    result.audio.reserve(channel.size());
+    result.audio.reserve(channel.size() / audio_decimation_ + 1);
 
     constexpr float pi = 3.14159265358979323846F;
     for (const auto sample : channel) {
@@ -140,12 +162,14 @@ DemodulatedBlock Demodulator::process(std::span<const std::uint8_t> iq) {
         const float avg_q = sample.imag();
 
         float audio = 0.0F;
-        if (modulation_ == Modulation::nfm) {
+        if (modulation_ == Modulation::nfm || modulation_ == Modulation::wfm) {
             const float cross = previous_i_ * avg_q - previous_q_ * avg_i;
             const float dot = previous_i_ * avg_i + previous_q_ * avg_q;
             // With 2.5 kHz NFM deviation at 48 kHz the raw discriminator peak
             // is only about 0.1. Restore useful PCM headroom before filtering.
-            audio = 6.0F * std::atan2(cross, dot) / pi;
+            const float discriminator_gain =
+                modulation_ == Modulation::wfm ? 1.4F : 6.0F;
+            audio = discriminator_gain * std::atan2(cross, dot) / pi;
             previous_i_ = avg_i;
             previous_q_ = avg_q;
         } else {
@@ -154,33 +178,38 @@ DemodulatedBlock Demodulator::process(std::span<const std::uint8_t> iq) {
             audio = (magnitude - am_dc_) * 3.0F;
         }
 
-        // The first pole provides the European 50 us NFM de-emphasis range.
+        // FM broadcasting and European NFM both use 50 us de-emphasis.
         audio_lp_ += audio_lowpass_alpha_ * (audio - audio_lp_);
 
-        // Remove discriminator DC, CTCSS and low-frequency rumble from speech.
-        const float high_pass =
-            audio_highpass_decay_ *
-            (audio_hp_state_ + audio_lp_ - audio_hp_previous_input_);
-        audio_hp_previous_input_ = audio_lp_;
-        audio_hp_state_ = high_pass;
-
-        audio_history_[audio_history_position_] = high_pass;
+        audio_history_[audio_history_position_] = audio_lp_;
         audio_history_position_ =
             (audio_history_position_ + 1) % audio_history_.size();
-        float speech_audio = 0.0F;
+
+        if (++audio_decimation_phase_ != audio_decimation_) continue;
+        audio_decimation_phase_ = 0;
+
+        float filtered_audio = 0.0F;
         std::size_t history_index = audio_history_position_;
         for (std::size_t tap = 0; tap < audio_filter_.size(); ++tap) {
             if (history_index == 0) history_index = audio_history_.size();
             --history_index;
-            speech_audio += audio_history_[history_index] * audio_filter_[tap];
+            filtered_audio += audio_history_[history_index] * audio_filter_[tap];
         }
+
+        // Remove discriminator DC, CTCSS and low-frequency rumble.
+        float output_audio =
+            audio_highpass_decay_ *
+            (audio_hp_state_ + filtered_audio - audio_hp_previous_input_);
+        audio_hp_previous_input_ = filtered_audio;
+        audio_hp_state_ = output_audio;
+
         if (notch_enabled_) {
             const float first_stage =
-                notch_b0_ * speech_audio + notch_b1_ * notch_x1_ +
+                notch_b0_ * output_audio + notch_b1_ * notch_x1_ +
                 notch_b2_ * notch_x2_ - notch_a1_ * notch_y1_ -
                 notch_a2_ * notch_y2_;
             notch_x2_ = notch_x1_;
-            notch_x1_ = speech_audio;
+            notch_x1_ = output_audio;
             notch_y2_ = notch_y1_;
             notch_y1_ = first_stage;
 
@@ -193,9 +222,9 @@ DemodulatedBlock Demodulator::process(std::span<const std::uint8_t> iq) {
             notch_second_x1_ = first_stage;
             notch_second_y2_ = notch_second_y1_;
             notch_second_y1_ = second_stage;
-            speech_audio = second_stage;
+            output_audio = second_stage;
         }
-        result.audio.push_back(to_pcm(speech_audio));
+        result.audio.push_back(to_pcm(output_audio));
     }
     return result;
 }

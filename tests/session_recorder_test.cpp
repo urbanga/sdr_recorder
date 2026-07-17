@@ -110,4 +110,25 @@ TEST(SessionRecorder, FinishDiscardsPendingTrailingSilence) {
     EXPECT_FALSE(recorder.recording());
 }
 
+TEST(SessionRecorder, MaximumSessionSplitsContinuousSignalAtExactSample) {
+    FakeFactory factory;
+    sdr::SessionRecorder recorder(10, 5.0, factory, 1.0);
+    std::vector<std::int16_t> signal(25);
+    for (std::size_t index = 0; index < signal.size(); ++index) {
+        signal[index] = static_cast<std::int16_t>(index);
+    }
+    recorder.process(signal, true);
+
+    ASSERT_EQ(factory.states.size(), 3U);
+    EXPECT_EQ(factory.states[0]->samples.size(), 10U);
+    EXPECT_EQ(factory.states[1]->samples.size(), 10U);
+    EXPECT_EQ(factory.states[2]->samples.size(), 5U);
+    EXPECT_EQ(factory.states[0]->samples.front(), 0);
+    EXPECT_EQ(factory.states[1]->samples.front(), 10);
+    EXPECT_EQ(factory.states[2]->samples.front(), 20);
+    EXPECT_EQ(factory.states[0]->closes, 1);
+    EXPECT_EQ(factory.states[1]->closes, 1);
+    EXPECT_TRUE(recorder.recording());
+}
+
 }  // namespace

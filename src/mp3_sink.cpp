@@ -103,13 +103,17 @@ private:
     std::FILE* file_{nullptr};
 };
 
-std::string timestamp() {
-    const auto now = std::chrono::system_clock::now();
+std::string timestamp(std::chrono::system_clock::time_point now) {
     const std::time_t time = std::chrono::system_clock::to_time_t(now);
     std::tm local{};
     localtime_r(&time, &local);
     std::ostringstream value;
     value << std::put_time(&local, "%Y%m%d_%H%M%S");
+    const auto milliseconds =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            now.time_since_epoch()) %
+        1000;
+    value << '_' << std::setw(3) << std::setfill('0') << milliseconds.count();
     return value.str();
 }
 
@@ -127,11 +131,12 @@ Mp3SinkFactory::Mp3SinkFactory(std::filesystem::path output_directory,
 
 std::unique_ptr<AudioSink> Mp3SinkFactory::create() {
     std::filesystem::path path;
+    auto start_time = std::chrono::system_clock::now();
     do {
         std::ostringstream name;
-        name << timestamp() << '_' << frequency_hz_ << "Hz_" << std::setw(3)
-             << std::setfill('0') << sequence_++ << ".mp3";
+        name << timestamp(start_time) << '_' << frequency_hz_ << "Hz.mp3";
         path = output_directory_ / name.str();
+        start_time += std::chrono::milliseconds(1);
     } while (std::filesystem::exists(path));
     std::fprintf(stderr, "Recording: %s\n", path.string().c_str());
     return std::make_unique<Mp3Sink>(path, sample_rate_, bitrate_kbps_);

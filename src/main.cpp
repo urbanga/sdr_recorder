@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
             config.output_directory, config.frequency_hz, config.audio_sample_rate,
             config.mp3_bitrate_kbps);
         sdr::SessionRecorder recorder(config.audio_sample_rate, config.silence_seconds,
-                                      sink_factory);
+                                      sink_factory, config.max_session_seconds);
 
         std::fprintf(stderr,
                      "Listening on %u Hz; squelch %.1f dBFS; stop with Ctrl+C\n",

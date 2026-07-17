@@ -36,18 +36,44 @@ Linux distribution.
   --output recordings
 ```
 
+For a continuously transmitting FM broadcast station, force the squelch open
+and use `--max-session` to split the recording into fixed-duration files:
+
+```bash
+./build/sdr-recorder \
+  --frequency 96.6M \
+  --modulation wfm \
+  --squelch-dbfs -100 \
+  --max-session 30 \
+  --bitrate 128 \
+  --output recordings
+```
+
+WFM uses 1.2 MS/s IQ, a 200 kHz broadcast channel, 50 us European
+de-emphasis, and 48 kHz mono audio with a 30 Hz high-pass and 15 kHz low-pass.
+Stereo decoding is not currently implemented. For mono broadcast audio,
+128 kb/s MP3 is recommended.
+
 Use `--help` for all parameters. Files are named using the local session start
 time and frequency, for example:
 
 ```text
-recordings/20260716_153045_446006250Hz_000.mp3
+recordings/20260716_153045_247_446006250Hz.mp3
 ```
+
+The millisecond timestamp keeps independently detected sessions and consecutive
+parts created by `--max-session` unique. No additional counter suffix is used.
 
 The recording begins with the first block whose signal level reaches the
 squelch threshold. Short pauses are retained as digital silence if the signal
 resumes before the configured boundary. Once `--silence` expires, that pending
 trailing pause is discarded and the MP3 is closed. A later transmission creates
 a new file.
+
+When `--max-session SECONDS` is supplied, an active recording is split exactly
+at that duration. A continuous station with `--max-session 30` therefore
+creates a new MP3 every 30 seconds. Without this option, session length is
+limited only by squelch and process shutdown.
 
 ## Calibrating squelch
 
@@ -87,4 +113,6 @@ channel back to baseband. This keeps the received carrier away from the common
 RTL-SDR DC spike. A 129-tap channel filter suppresses that spike and other
 out-of-channel energy before IQ decimation. NFM audio then passes through
 50 us de-emphasis, a 150 Hz high-pass, and a 101-tap 3.4 kHz speech low-pass
-before MP3 encoding.
+before MP3 encoding. WFM uses a separate 1.2 MHz to 240 kHz channel stage so
+the wide FM deviation is preserved before audio filtering and resampling to
+48 kHz.

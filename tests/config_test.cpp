@@ -60,6 +60,19 @@ TEST(Config, ParsesOptionalAudioNotch) {
     EXPECT_DOUBLE_EQ(config.notch_width_hz, 120.0);
 }
 
+TEST(Config, WideFmSelectsBroadcastIqRateAndParsesMaximumSession) {
+    const auto config = parse({"app", "-f", "96.6M", "--modulation", "wfm",
+                               "--max-session", "30"});
+    EXPECT_EQ(config.modulation, sdr::Modulation::wfm);
+    EXPECT_EQ(config.iq_sample_rate, 1'200'000U);
+    EXPECT_DOUBLE_EQ(config.max_session_seconds, 30.0);
+}
+
+TEST(Config, RejectsNegativeMaximumSession) {
+    EXPECT_THROW(parse({"app", "-f", "96.6M", "--max-session", "-1"}),
+                 std::invalid_argument);
+}
+
 TEST(Config, ParsingIsIndependentOfProcessLocale) {
     const ScopedGlobalLocale comma_locale;
     const auto config = parse({"app", "-f", "446.00625M", "--silence", "10.5"});
