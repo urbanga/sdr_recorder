@@ -8,7 +8,7 @@ session to a separate MP3 file. It talks directly to `librtlsdr` and
 
 Required development/runtime packages:
 
-- C++20 compiler and CMake 3.20+
+- C++20 compiler and CMake 3.18+
 - `librtlsdr`
 - `libmp3lame`
 - GoogleTest (only for building tests)
@@ -16,7 +16,7 @@ Required development/runtime packages:
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-ctest --test-dir build --output-on-failure
+(cd build && ctest --output-on-failure)
 ```
 
 The resulting application is `build/sdr-recorder`. The application is one
