@@ -30,4 +30,11 @@ TEST(Config, RejectsUnknownOption) {
     EXPECT_THROW(parse({"app", "-f", "100M", "--magic"}), std::invalid_argument);
 }
 
+TEST(Config, ParsesOptionalAudioNotch) {
+    const auto config = parse({"app", "-f", "446M", "--notch-frequency", "1890",
+                               "--notch-width", "120"});
+    EXPECT_DOUBLE_EQ(config.notch_frequency_hz, 1890.0);
+    EXPECT_DOUBLE_EQ(config.notch_width_hz, 120.0);
+}
+
 }  // namespace

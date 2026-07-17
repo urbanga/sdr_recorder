@@ -44,8 +44,10 @@ recordings/20260716_153045_446006250Hz_000.mp3
 ```
 
 The recording begins with the first block whose signal level reaches the
-squelch threshold. It contains all intermittent pauses and the final configured
-silence interval. A later transmission creates a new file.
+squelch threshold. Short pauses are retained as digital silence if the signal
+resumes before the configured boundary. Once `--silence` expires, that pending
+trailing pause is discarded and the MP3 is closed. A later transmission creates
+a new file.
 
 ## Calibrating squelch
 
@@ -55,6 +57,19 @@ channel is idle, raise the value (for example to `-30`). If transmissions are
 missed, lower it (for example to `-42`). For stable installations, manual
 `--gain` generally gives more repeatable detection. `--level-meter` prints the
 measured level once per second and whether the squelch is open.
+
+## Removing a persistent receiver tone
+
+An installation-specific narrow interference tone can be removed without
+changing the normal speech filter:
+
+```bash
+--notch-frequency 1890 --notch-width 120
+```
+
+The notch is disabled unless `--notch-frequency` is supplied. It uses two
+narrow stages for strong rejection while preserving more surrounding speech;
+its width should be only large enough to cover the observed tone drift.
 
 ## Design
 
@@ -69,4 +84,7 @@ without an RTL-SDR device and without creating files.
 
 The tuner uses quarter-sample-rate offset tuning and digitally moves the wanted
 channel back to baseband. This keeps the received carrier away from the common
-RTL-SDR DC spike.
+RTL-SDR DC spike. A 129-tap channel filter suppresses that spike and other
+out-of-channel energy before IQ decimation. NFM audio then passes through
+50 us de-emphasis, a 150 Hz high-pass, and a 101-tap 3.4 kHz speech low-pass
+before MP3 encoding.

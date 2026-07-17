@@ -42,7 +42,7 @@ TEST(SessionRecorder, IgnoresSilenceBeforeFirstSignal) {
     EXPECT_TRUE(factory.states.empty());
 }
 
-TEST(SessionRecorder, IncludesTrailingSilenceAndClosesAtConfiguredDuration) {
+TEST(SessionRecorder, DiscardsTrailingSilenceAndClosesAtConfiguredDuration) {
     FakeFactory factory;
     sdr::SessionRecorder recorder(10, 1.0, factory);
     const std::vector<std::int16_t> signal(10, 2);
@@ -53,23 +53,29 @@ TEST(SessionRecorder, IncludesTrailingSilenceAndClosesAtConfiguredDuration) {
     recorder.process(silence, false);
 
     ASSERT_EQ(factory.states.size(), 1U);
-    EXPECT_EQ(factory.states[0]->samples.size(), 20U);
+    EXPECT_EQ(factory.states[0]->samples.size(), 10U);
+    EXPECT_EQ(factory.states[0]->samples[9], 2);
     EXPECT_EQ(factory.states[0]->closes, 1);
     EXPECT_FALSE(recorder.recording());
 }
 
-TEST(SessionRecorder, ContinuedSignalResetsSilenceTimer) {
+TEST(SessionRecorder, ContinuedSignalPreservesInternalPauseAndResetsTimer) {
     FakeFactory factory;
     sdr::SessionRecorder recorder(10, 1.0, factory);
-    const std::vector<std::int16_t> half_second(5, 0);
-    recorder.process(half_second, true);
-    recorder.process(half_second, false);
-    recorder.process(half_second, true);
-    recorder.process(half_second, false);
+    const std::vector<std::int16_t> signal(5, 2);
+    const std::vector<std::int16_t> silence(5, 0);
+    recorder.process(signal, true);
+    recorder.process(silence, false);
+    recorder.process(signal, true);
+    recorder.process(silence, false);
     EXPECT_TRUE(recorder.recording());
-    recorder.process(half_second, false);
+    recorder.process(silence, false);
     EXPECT_FALSE(recorder.recording());
-    EXPECT_EQ(factory.states[0]->samples.size(), 25U);
+    ASSERT_EQ(factory.states[0]->samples.size(), 15U);
+    EXPECT_EQ(factory.states[0]->samples[4], 2);
+    EXPECT_EQ(factory.states[0]->samples[5], 0);
+    EXPECT_EQ(factory.states[0]->samples[9], 0);
+    EXPECT_EQ(factory.states[0]->samples[10], 2);
 }
 
 TEST(SessionRecorder, NewSignalAfterCloseCreatesNewFile) {

@@ -22,6 +22,8 @@ struct Config {
     std::uint32_t audio_sample_rate{48'000};
     int mp3_bitrate_kbps{64};
     bool level_meter{false};
+    double notch_frequency_hz{0.0};
+    double notch_width_hz{120.0};
 };
 
 class UsageRequested final : public std::exception {

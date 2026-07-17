@@ -84,6 +84,12 @@ Config parse_arguments(int argc, char** argv) {
                 static_cast<int>(parse_number(next_value(i, argc, argv), option));
         } else if (option == "--level-meter") {
             config.level_meter = true;
+        } else if (option == "--notch-frequency") {
+            config.notch_frequency_hz =
+                parse_number(next_value(i, argc, argv), option);
+        } else if (option == "--notch-width") {
+            config.notch_width_hz =
+                parse_number(next_value(i, argc, argv), option);
         } else {
             throw std::invalid_argument("Unknown option: " + std::string(option));
         }
@@ -94,6 +100,13 @@ Config parse_arguments(int argc, char** argv) {
     if (config.device_index < 0) throw std::invalid_argument("--device must not be negative");
     if (config.mp3_bitrate_kbps < 8 || config.mp3_bitrate_kbps > 320) {
         throw std::invalid_argument("--bitrate must be between 8 and 320");
+    }
+    if (config.notch_frequency_hz < 0.0 ||
+        config.notch_frequency_hz >= config.audio_sample_rate / 2.0) {
+        throw std::invalid_argument("--notch-frequency must be below the audio Nyquist rate");
+    }
+    if (config.notch_width_hz <= 0.0) {
+        throw std::invalid_argument("--notch-width must be positive");
     }
     return config;
 }
@@ -112,6 +125,8 @@ std::string usage(const char* program) {
         << "      --ppm PPM            Frequency correction (default: 0)\n"
         << "      --bitrate KBPS       MP3 bitrate, 8-320 (default: 64)\n"
         << "      --level-meter        Print signal level once per second\n"
+        << "      --notch-frequency HZ Remove a persistent audio tone (disabled by default)\n"
+        << "      --notch-width HZ     Notch width (default: 120)\n"
         << "  -h, --help               Show this help\n";
     return out.str();
 }

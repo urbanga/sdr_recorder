@@ -28,7 +28,9 @@ int main(int argc, char** argv) {
 
         sdr::RtlSdrSource source(config);
         sdr::Demodulator demodulator(config.modulation, config.iq_sample_rate,
-                                     config.audio_sample_rate);
+                                     config.audio_sample_rate,
+                                     config.notch_frequency_hz,
+                                     config.notch_width_hz);
         sdr::Mp3SinkFactory sink_factory(
             config.output_directory, config.frequency_hz, config.audio_sample_rate,
             config.mp3_bitrate_kbps);
